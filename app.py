@@ -91,6 +91,28 @@ def analyze():
             'facialmaskcombo', 'coustom'
         ]
 
+        # ── Known Aroma patterns (perfumes, combos, branded items) ──
+        # These are confirmed Aroma products - don't flag them as unknown
+        aroma_kw_norm = [
+            'signature', 'srk', 'iconic', 'euphoria', 'midnight', 'starlight',
+            'moonlight', 'dior', 'gucci', 'chanel', 'versace', 'burberry',
+            'ysl', 'vampire', 'sauvage', 'tomford', 'creed', 'opium',
+            'combo15ml', 'combo30ml', 'combo50ml',
+            'womancombo', 'mancombo', 'mencombo', 'womencombo',
+            'bodymist', 'perfume', 'fragrance', 'spray',
+            'package', 'coolwater', 'vanilla', 'seduction',
+            'bombshell', 'flora', 'kayali', 'marcjacobs',
+            'blueberry', 'bluberry', 'blubery',
+            'aroma', 'rollon', 'hamper', 'chooseanypcs',
+            'chooseany', 'eternalseduction', 'crimsondesire',
+            'silvermoon', 'chocoseduction', 'sugarvanilla',
+            'gd', 'gv', 'voucher',
+            'diosauvage', 'diorsauvage', 'goodgirl', 'blackopium',
+            'missdior', 'cocochanel', 'bleu', 'eros',
+            'tommyhilfiger', 'pourhomme', 'toford',
+            'misdior', 'libre'
+        ]
+
         # ── Counters ──
         nutique_pb = 0
         nutique_niramay = 0
@@ -169,14 +191,17 @@ def analyze():
             aroma_identified += 1
             aroma_cod += cod
             aroma_ship += ship
-            # Track unique unknowns for review
-            inv_short = inv_raw[:80]
-            if inv_short not in [u['name'] for u in unknown_items]:
-                unknown_items.append({'name': inv_short, 'cod': cod})
+
+            # Check if this is a KNOWN Aroma product or truly unknown
+            is_known_aroma = any(kw in inv_norm for kw in aroma_kw_norm)
+            if not is_known_aroma and inv_raw:
+                inv_short = inv_raw[:80]
+                if inv_short not in [u['name'] for u in unknown_items]:
+                    unknown_items.append({'name': inv_short, 'cod': cod})
 
         # Build unknown text for Telegram
         unknown_text = ""
-        for item in unknown_items[:15]:
+        for item in unknown_items:
             unknown_text += item['name'] + " | COD:" + str(item['cod']) + "\n"
 
         return jsonify({
