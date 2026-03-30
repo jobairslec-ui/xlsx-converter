@@ -36,6 +36,12 @@ def analyze():
 
         df = pd.read_excel(io.BytesIO(data), header=0)
 
+        # Force columns N and O to numeric
+        df.iloc[:, 13] = pd.to_numeric(df.iloc[:, 13], errors='coerce').fillna(0)
+        df.iloc[:, 14] = pd.to_numeric(df.iloc[:, 14], errors='coerce').fillna(0)
+        # Fill column E NaN with empty string
+        df.iloc[:, 4] = df.iloc[:, 4].fillna('').astype(str)
+
         # Extract date from first row
         date_str = "unknown"
         try:
@@ -54,23 +60,53 @@ def analyze():
         except Exception:
             pass
 
-        # Keywords
-        ayra_kw = [
-            'hair', 'facewash', 'serum', 'cream', 'moisturizer', 'sunscreen',
-            'toner', 'scrub', 'bodylotion', 'skincare', 'shampoo', 'shampo',
-            'conditioner', 'tonic', 'rosemary', 'mint', 'caffeine', 'caffiene',
-            'caffine', 'hairpack', 'facepack', 'facemask', 'facemusk', 'acnemusk',
-            'acnefree', 'facial', 'coconut', 'castor', 'blackseed', 'teatree',
-            'goldenoil', 'reviveoil', 'ricetonic', 'protein', 'ayra',
-            'antidandruff', 'driedleaves', 'glowdust'
-        ]
-        pb_kw = ['peanut', 'creamy', 'darkchocolate', 'whitechocolate',
-                 'pbcombo', 'macapowder', 'oliveoil']
-        dw_excl = ['ml', 'dior', 'chanel', 'opium', 'orchid']
-        niramay_kw = ['niramay', 'niramoy', 'stressrelief', 'painrelief',
-                      'painspray', 'reliefcombo']
+        # ── Keyword lists (matching ChatGPT prompt exactly) ──
 
-        # Counters
+        # Nutique PB keywords (checked on normalized text: lowercase, no spaces/underscores/hyphens)
+        pb_kw_norm = [
+            'peanutbutter', 'peanut', 'creamy', 'darkchocolate', 'whitechocolate',
+            'chocolatecombo', 'pbcombo', 'macapowder', 'oliveoil'
+        ]
+        # Nutique PB Bengali (checked on original text)
+        pb_kw_bengali = [
+            '\u09aa\u09bf\u09a8\u09be\u099f',        # পিনাট
+            '\u09ac\u09be\u099f\u09be\u09b0',          # বাটার
+            '\u0995\u09cd\u09b0\u09bf\u09ae\u09bf',    # ক্রিমি
+            '\u099a\u0995\u09b2\u09c7\u099f',          # চকলেট
+            '\u09ae\u09be\u0995\u09be',                # মাকা
+            '\u099c\u09be\u09df\u09a4\u09c1\u09a8'     # জায়তুন
+        ]
+        # dark/white exclusions for PB detection
+        dw_excl = ['ml', 'dior', 'chanel', 'opium', 'orchid']
+
+        # Nutique Niramay keywords (normalized)
+        niramay_kw_norm = [
+            'niramay', 'niramoy', 'stressrelief', 'painrelief', 'painspray', 'reliefcombo'
+        ]
+        # Niramay Bengali (original text)
+        niramay_kw_bengali = [
+            '\u09a8\u09bf\u09b0\u09be\u09ae\u09df\u09bc',  # নিরাময়
+            '\u09b8\u09cd\u099f\u09cd\u09b0\u09c7\u09b8',  # স্ট্রেস
+            '\u09b0\u09bf\u09b2\u09bf\u09ab',              # রিলিফ
+            '\u09ac\u09cd\u09af\u09a5\u09be'               # ব্যথা
+        ]
+
+        # Ayra keywords (checked on normalized text)
+        ayra_kw_norm = [
+            'hair', 'facewash', 'serum', 'cream', 'moisturizer', 'sunscreen',
+            'toner', 'scrub', 'bodylotion', 'bodybutter', 'skincare',
+            'shampoo', 'shampo', 'newshampo', 'conditioner',
+            'tonic', 'rosemary', 'rosemerit', 'rmint', 'mint',
+            'caffeine', 'caffiene', 'caffine',
+            'hairpack', 'facepack', 'facemask', 'facemusk', 'acnemusk', 'acnefree',
+            'facial', 'essentialoil', 'coconutoil', 'coconut', 'castor',
+            'blackseed', 'teatree', 'goldenoil', 'reviveoil', 'ricetonic',
+            'protein', 'ayra', 'antidandruff', 'goldenoil', 'driedleaves',
+            'glow', 'glowdust', 'facemaskcombo', '3facepackcombo',
+            'facialmaskcombo', 'coustom', 'oil'
+        ]
+
+        # ── Counters ──
         nutique_pb = 0
         nutique_niramay = 0
         ayra_identified = 0
@@ -86,31 +122,25 @@ def analyze():
         excluded = 0
 
         for _, row in df.iterrows():
-            inv_raw = str(row.iloc[4]).strip() if pd.notna(row.iloc[4]) else ""
-            try:
-                cod = int(float(row.iloc[13])) if pd.notna(row.iloc[13]) else 0
-            except (ValueError, TypeError):
-                cod = 0
-            try:
-                ship = int(float(row.iloc[14])) if pd.notna(row.iloc[14]) else 0
-            except (ValueError, TypeError):
-                ship = 0
+            inv_raw = str(row.iloc[4]).strip()
+            cod = int(row.iloc[13])
+            ship = int(row.iloc[14])
 
             inv_lower = inv_raw.lower()
             inv_norm = inv_lower.replace(' ', '').replace('_', '').replace('-', '')
 
-            # STEP 1: Exclude
-            if re.match(r'\d{6}-\d{5}', inv_raw):
+            # ── STEP 1: Exclude ──
+            if re.match(r'^\d{6}-\d+', inv_raw):
                 excluded += 1
                 continue
-            if 'spraymatha' in inv_lower:
+            if 'spraymatha' in inv_lower or 'spray-matha' in inv_lower or 'spray_matha' in inv_lower:
                 excluded += 1
                 continue
             if '228283819' in inv_raw:
                 excluded += 1
                 continue
 
-            # STEP 2: Fixed price
+            # ── STEP 2: Fixed price (before keyword matching) ──
             if cod == 900:
                 ayra_fixed_900 += 1
                 continue
@@ -124,33 +154,55 @@ def analyze():
                 aroma_fixed_1099 += 1
                 continue
 
-            # STEP 3A: Nutique PB
-            is_pb = any(k in inv_norm for k in pb_kw)
+            # ── STEP 3A: Nutique PB ──
+            is_pb = False
+            # Check normalized keywords
+            for kw in pb_kw_norm:
+                if kw in inv_norm:
+                    is_pb = True
+                    break
+            # Check dark/white PB combos (not perfume)
             if not is_pb and ('dark' in inv_norm or 'white' in inv_norm):
                 if not any(x in inv_norm for x in dw_excl):
                     is_pb = True
-            if not is_pb and ('\u09aa\u09bf\u09a8\u09be\u099f' in inv_raw or '\u09ac\u09be\u099f\u09be\u09b0' in inv_raw):
-                is_pb = True
+            # Check Bengali
+            if not is_pb:
+                for kw in pb_kw_bengali:
+                    if kw in inv_raw:
+                        is_pb = True
+                        break
             if is_pb:
                 nutique_pb += 1
                 continue
 
-            # STEP 3B: Nutique Niramay
-            is_nir = any(k in inv_norm for k in niramay_kw)
-            if not is_nir and ('\u09b8\u09cd\u099f\u09cd\u09b0\u09c7\u09b8' in inv_raw or '\u09b0\u09bf\u09b2\u09bf\u09ab' in inv_raw or '\u09a8\u09bf\u09b0\u09be\u09ae\u09df\u09bc' in inv_raw):
-                is_nir = True
+            # ── STEP 3B: Nutique Niramay ──
+            is_nir = False
+            for kw in niramay_kw_norm:
+                if kw in inv_norm:
+                    is_nir = True
+                    break
+            if not is_nir:
+                for kw in niramay_kw_bengali:
+                    if kw in inv_raw:
+                        is_nir = True
+                        break
             if is_nir:
                 nutique_niramay += 1
                 continue
 
-            # STEP 3C: Ayra
-            if any(k in inv_norm for k in ayra_kw):
+            # ── STEP 3C: Ayra ──
+            is_ayra = False
+            for kw in ayra_kw_norm:
+                if kw in inv_norm:
+                    is_ayra = True
+                    break
+            if is_ayra:
                 ayra_identified += 1
                 ayra_cod += cod
                 ayra_ship += ship
                 continue
 
-            # STEP 3D: Aroma (everything else)
+            # ── STEP 3D: Aroma (everything else) ──
             aroma_identified += 1
             aroma_cod += cod
             aroma_ship += ship
