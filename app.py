@@ -1,15 +1,14 @@
 from flask import Flask, request, jsonify
 import pandas as pd
-import io, base64
+import io
 
 app = Flask(__name__)
 
 @app.route('/convert', methods=['POST'])
 def convert():
     try:
-        file_b64 = request.get_json().get('file')
-        file_bytes = base64.b64decode(file_b64)
-        df = pd.read_excel(io.BytesIO(file_bytes), header=0)
+        file = request.files.get('file')
+        df = pd.read_excel(io.BytesIO(file.read()), header=0)
         return jsonify({'csv': df.to_csv(index=False)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
