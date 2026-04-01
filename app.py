@@ -78,30 +78,29 @@ def analyze():
         ]
 
         ayra_kw_norm = [
-            'hair', 'facewash', 'serum', 'cream', 'moisturizer', 'sunscreen',
+            'hair', 'hiar', 'facewash', 'serum', 'cream', 'moisturizer', 'sunscreen',
             'toner', 'scrub', 'bodylotion', 'bodybutter', 'skincare',
             'shampoo', 'shampo', 'newshampo', 'conditioner',
             'tonic', 'rosemary', 'rosemerit', 'rmint', 'mint',
             'caffeine', 'caffiene', 'caffine',
-            'hairpack', 'facepack', 'facemask', 'facemusk', 'acnemusk', 'acnefree',
+            'hairpack', 'hiarpack', 'facepack', 'facemask', 'facemusk', 'acnemusk', 'acnefree',
             'facial', 'essentialoil', 'coconutoil', 'coconut', 'castor',
             'blackseed', 'teatree', 'goldenoil', 'reviveoil', 'ricetonic',
             'protein', 'ayra', 'antidandruff', 'driedleaves',
-            'glow', 'glowdust', 'facemaskcombo', '3facepackcombo',
-            'facialmaskcombo', 'coustom'
+            'glow', 'glowdust', 'gludust', 'facemaskcombo', '3facepackcombo',
+            'facialmaskcombo', 'coustom', 'face', 'keratin', 'jojoba'
         ]
 
-        # ── Known Aroma patterns (perfumes, combos, branded items) ──
-        # These are confirmed Aroma products - don't flag them as unknown
+        # ── Known Aroma patterns ──
         aroma_kw_norm = [
             'signature', 'srk', 'iconic', 'euphoria', 'midnight', 'starlight',
             'moonlight', 'dior', 'gucci', 'chanel', 'versace', 'burberry',
             'ysl', 'vampire', 'sauvage', 'tomford', 'creed', 'opium',
             'combo15ml', 'combo30ml', 'combo50ml',
             'womancombo', 'mancombo', 'mencombo', 'womencombo',
-            'bodymist', 'perfume', 'fragrance', 'spray',
+            'bodymist', 'perfume', 'fragrance',
             'package', 'coolwater', 'vanilla', 'seduction',
-            'bombshell', 'flora', 'kayali', 'marcjacobs',
+            'bombshell', 'boomshell', 'flora', 'kayali', 'marcjacobs',
             'blueberry', 'bluberry', 'blubery',
             'aroma', 'rollon', 'hamper', 'chooseanypcs',
             'chooseany', 'eternalseduction', 'crimsondesire',
@@ -110,8 +109,13 @@ def analyze():
             'diosauvage', 'diorsauvage', 'goodgirl', 'blackopium',
             'missdior', 'cocochanel', 'bleu', 'eros',
             'tommyhilfiger', 'pourhomme', 'toford',
-            'misdior', 'libre'
+            'misdior', 'libre',
+            'carnivalbliss', 'onemillion', 'armani', 'dunhill',
+            'montblanc', 'legend', 'icon'
         ]
+
+        # ── Exclusion words (in addition to spraymatha/date-prefix/228283819) ──
+        exclude_words = ['mistake', 'deleted']
 
         # ── Counters ──
         nutique_pb = 0
@@ -137,13 +141,22 @@ def analyze():
             inv_norm = inv_lower.replace(' ', '').replace('_', '').replace('-', '')
 
             # STEP 1: Exclude
-            if re.match(r'^\d{6}-\d+', inv_raw):
+            # Date-prefixed junk IDs (YYMMDD-XXXXX or similar number patterns)
+            if re.match(r'^\d{5,6}-\d+', inv_raw):
                 excluded += 1
                 continue
             if 'spraymatha' in inv_lower or 'spray-matha' in inv_lower or 'spray_matha' in inv_lower:
                 excluded += 1
                 continue
             if '228283819' in inv_raw:
+                excluded += 1
+                continue
+            # Exclude rows with "mistake", "deleted", or pure random numbers
+            if any(w in inv_lower for w in exclude_words):
+                excluded += 1
+                continue
+            # Exclude if invoice is just numbers (like random IDs)
+            if re.match(r'^\d+$', inv_raw.strip()):
                 excluded += 1
                 continue
 
@@ -192,7 +205,7 @@ def analyze():
             aroma_cod += cod
             aroma_ship += ship
 
-            # Check if this is a KNOWN Aroma product or truly unknown
+            # Check if known Aroma or truly unknown
             is_known_aroma = any(kw in inv_norm for kw in aroma_kw_norm)
             if not is_known_aroma and inv_raw:
                 inv_short = inv_raw[:80]
